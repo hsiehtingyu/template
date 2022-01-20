@@ -1,0 +1,83 @@
+---
+- name: get first instance groups
+  shell: >
+    gcloud compute instance-groups list 
+    --filter={{ base_instance_groups_name }} 
+    --limit=1 | grep '{{ base_instance_groups_name }}' | awk '{print $1}'
+  register: instance_groups
+
+- name: get first instance name from instance groups if location is Single zone
+  shell: > 
+    gcloud compute instance-groups managed list-instances {{ instance_groups.stdout }} 
+    --zone={{ zone }} 
+    --limit=1 | grep {{ instance_groups.stdout }} | awk '{print $1}'
+  register: instance
+  when: zone is defined
+
+- name: get first instance name from instance groups if location is Multiple zones
+  shell: >
+    gcloud compute instance-groups managed list-instances {{ instance_groups.stdout }} 
+    --region={{ region }} 
+    --limit=1 | grep {{ instance_groups.stdout }} | awk '{print $1}'
+  register: instance
+  when: region is defined
+
+- name: create instance snapshot
+  shell: >
+    gcloud compute disks snapshot {{ instance.stdout }} 
+    --snapshot-names={{ base_instance_groups_name }}-snapshot-{{ ansible_date_time.date }} 
+    --zone={{ zone }}
+
+- name: create instance image
+  shell: >
+    gcloud compute images create {{ base_instance_groups_name }}-image-{{ ansible_date_time.date }} 
+    --source-snapshot={{ base_instance_groups_name }}-snapshot-{{ ansible_date_time.date }}
+
+#- name: get existing snapshot name 
+#  shell: gcloud compute snapshots list --filter="{{ base_instance_groups_name }} AND creationTimestamp<$(date -d "-7 days" "+%Y-%m-%d")" | grep {{ base_inst
+ance_groups_name }} | awk '{print $1}'
+#  register: snapshot
+
+#- name: create instance image from existing snapshot 
+#  shell: "gcloud compute images create {{ base_instance_groups_name }}-image-{{ ansible_date_time.date }} --source-snapshot={{ snapshot.stdout_lines[0] }}"
+
+#- name: create instance template
+#  shell: >
+#    gcloud compute instance-templates create {{ base_instance_groups_name }}-template-{{ ansible_date_time.date }} 
+#    --boot-disk-device-name={{ base_instance_groups_name }}-template-{{ ansible_date_time.date }} 
+#    --boot-disk-size={{ disk_size }}GB 
+#    --boot-disk-type=pd-balanced 
+#    --image=projects/litv-sirona/global/images/{{ base_instance_groups_name }}-image-{{ ansible_date_time.date }} 
+#    --machine-type={{ machine_type }} 
+#    --network-interface=network=litv-vpc,subnet={{ subnet }} 
+#    --region={{ region }} 
+#    --labels=env=prod 
+#    --service-account=389456983229-compute@developer.gserviceaccount.com
+
+- name: create instance template
+  shell: >
+    gcloud compute instance-templates create {{ base_instance_groups_name }}-template-{{ ansible_date_time.date }} 
+    --boot-disk-device-name={{ base_instance_groups_name }}-template-{{ ansible_date_time.date }} 
+    --boot-disk-size={{ disk_size }}GB 
+    --boot-disk-type=pd-balanced #pd-standard 
+    --image=projects/litv-sirona/global/images/{{ base_instance_groups_name }}-image-{{ ansible_date_time.date }} 
+    --machine-type={{ machine_type }} 
+    --network-interface=network=litv-vpc,subnet={{ subnet }} 
+    --region={{ region }} 
+    --tags=http-server,https-server 
+    --service-account=389456983229-compute@developer.gserviceaccount.com #ec2-user@litv-sirona.iam.gserviceaccount.com 
+    --scopes=https://www.googleapis.com/auth/cloud-platform
+
+#- name: create isntance groups
+#  shell: >
+#    gcloud compute instance-groups managed create {{ base_instance_groups_name }}-{{ ansible_date_time.date }} 
+#    --zone={{ zone }} 
+#    --size={{ size }} 
+#    --template={{ base_instance_groups_name }}-template-{{ ansible_date_time.date }}  
+#    --health-check=health-check-8290-http-ping
+
+#- name: change instance group template
+#  shell: > 
+#    gcloud compute instance-groups managed set-instance-template {{ instance_groups }} 
+#    --template={{ template }}-{{ ansible_date_time.date }} 
+#    --region={{ region }}
